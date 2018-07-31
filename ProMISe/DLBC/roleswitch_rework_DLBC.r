@@ -7,6 +7,42 @@ library(ROCR)
 library(preprocessCore)
 library(Roleswitch)
 
+
+devide_val = function(table,val_list)
+{
+  val_collection = list()
+  for(i in 1:11)
+  {
+    val = val_list[[i]]
+    #ROC and AUC calculated
+    gpval = val[intersect(getGoldPositive(novel_miRs[i]),rownames(table))]
+    gnval = val[intersect(getGoldNegative(novel_miRs[i]),rownames(table))]
+    val = c(gpval, gnval)
+    
+    val_collection[[novel_miRs[i]]] = val
+  }
+  return(val_collection)
+}
+
+devide_label = function(table,val_list)
+{
+  label_collection = list()
+  for(i in 1:11)
+  {
+    val = val_list[[i]]
+    #ROC and AUC calculated
+    gpval = val[intersect(getGoldPositive(novel_miRs[i]),rownames(table))]
+    gnval = val[intersect(getGoldNegative(novel_miRs[i]),rownames(table))]
+    val = 1-c(gpval, gnval)
+    label = array(0, dim = length(val))
+    label[1:length(gpval)]=1
+    label = factor(label)
+    
+    label_collection[[novel_miRs[i]]] = label
+  }
+  return(label_collection)
+}
+
 #function for calculate raw values of ROC
 draw_AUC = function(table,val,method_type,miR)
 {
@@ -30,12 +66,6 @@ draw_AUC = function(table,val,method_type,miR)
   Y_TPR = as.numeric(perf1@y.values[[1]])
   perf2 = performance(pred, 'auc')
   AUC = perf2@y.values[[1]]
-  
-  #data extracted to global vector
-  # BIG_X <<- c(BIG_X,X_FPR)
-  # BIG_Y <<- c(BIG_Y,Y_TPR)
-  # BIG_AUC <<- c(BIG_AUC,AUC)
-  # BIG_METHODS <<- c(BIG_METHODS,rep(name,length(X_FPR)))
   roleswitch_test = list(perf1=perf1,X_FPR = X_FPR, Y_TPR = Y_TPR,perf2 = perf2,AUC=AUC)
   
 }
@@ -139,6 +169,8 @@ PARTmRNA = cbind(PARTGP,PARTGN)
 PARTmRNA = PARTmRNA[,unique(colnames(PARTmRNA))]
 PARTmRNA_News = cbind(PARTNP,PARTNN)
 PARTmRNA_News = PARTmRNA_News[,unique(colnames(PARTmRNA_News))]
+                  
+                  
 #quantile normalize data
 QN_miR = normalize.quantiles(t(PARTmiR)) # Sora: Must be transposed
 QN_miR = t(QN_miR) # Sora: Added by Sora
@@ -171,44 +203,11 @@ for(mir in colnames(c_New))
   c_New[intersect(c(getNewGoldPositive(mir),getNewGoldNegative(mir)),rownames(c_New)),mir] = 1
 }
 
-#require perfect gene list to work(exact seed match table)
-# site_numbers = read.table("target_number_count.txt")
-# site_numbers = site_numbers[which(site_numbers[,2]%in%rownames(c)),]
-# for(i in novel_miRs)
-# {
-#   for(j in site_numbers[,2])
-#   {
-#     if(length(intersect(which(site_numbers[,1]==i,arr.ind = T),which(site_numbers[,2]==j,arr.ind = T)))>0)
-#     {
-#       c[j,i] = site_numbers[intersect(which(site_numbers[,1]==i,arr.ind = T),which(site_numbers[,2]==j,arr.ind = T)),3]
-#     }
-#   }
-# }
 
-#codes worked for genmir++ relation matrix
-# mirna_targets = readLines("miRNA_target_list.txt")
-# mirna_list = readLines('miRNA_list.txt')
-# gene_list = readLines('gene_list.txt')
-
-# for(i in 1:nrow(c))
-# {
-#   miR = colnames(QN_miR)[i]
-#   miridx = which(mirna_list == miR)
-#   gene_idx = as.numeric(unlist(strsplit(mirna_targets[miridx], split = "\t")))
-#   if(length(gene_idx)==0){next
-#   }else{
-#     targets = genelist[gene_idx]
-#     c[i, which(colnames(c)%in%targets)] = 1
-#   }
-# }
-# c = t(c)
 rownames(c) = c(1:length(colnames(QN_mRNA)))
 colnames(c) = c(1:length(colnames(QN_miR)))
 rownames(c_New) = c(1:length(colnames(QN_mRNA_News)))
 colnames(c_New) = c(1:length(colnames(QN_miR)))
-
-#test seed matrix (all 1, like in mirlab)
-#c = matrix(1,nrow = ncol(QN_mRNA),ncol = ncol(QN_miR))
 
 mother_list = list()
 log_mother_list = list()
@@ -231,7 +230,14 @@ for(i in 1:length(rownames(QN_miR)))
   nz.o = log2(nz.o+1)
   new_log_mother_list[[substr(rownames(QN_miR)[i],1,25)]] = roleswitch(nx.o,nz.o,c_New)$p.xz
 }
-
+                  
+################
+x = matrix(colMeans(QN_mRNA),dimnames = list(c(1:length(colnames(QN_mRNA))),'mRNA'))
+z = matrix(colMeans(QN_miR),dimnames = list(c(1:length(colnames(QN_miR))),'miRNA'))
+miRLAB_style = roleswitch(x,z,c)$p.xz
+rownames(miRLAB_style) = colnames(QN_mRNA)
+colnames(miRLAB_style) = colnames(QN_miR)
+                  
 mother_names = names(mother_list)
 log_mother_names = names(log_mother_list)
 new_mother_names = names(new_mother_list)
@@ -273,6 +279,7 @@ new_log_val_list = list()
 
 for(i in 1:11)
 {
+  val_miRLAB[[i]] = miRLAB_style[intersect(c(getGoldPositive(novel_miRs[i]),getGoldNegative(novel_miRs[i])),rownames(miRLAB_style)),i]
   val_list[[i]] = sq_mean[intersect(c(getGoldPositive(novel_miRs[i]),getGoldNegative(novel_miRs[i])),rownames(sq_mean)),i]
   log_val_list[[i]] = log_sq_mean[intersect(c(getGoldPositive(novel_miRs[i]),getGoldNegative(novel_miRs[i])),rownames(sq_mean)),i]
   new_val_list[[i]] = new_sq_mean[intersect(c(getNewGoldPositive(novel_miRs[i]),getNewGoldNegative(novel_miRs[i])),rownames(new_sq_mean)),i]
@@ -352,3 +359,86 @@ AUC_Grade = function(X)
 }
 AUC_Grade(AUCs)
 AUC_Grade(log_AUCs)
+
+#drawing sum-up ROCs
+mir_val = devide_val(miRLAB_style,val_miRLAB)
+old_raw_val = devide_val(sq_mean,val_list)
+old_log_val = devide_val(log_sq_mean,log_val_list)
+new_raw_val = devide_val(new_sq_mean,new_val_list)
+new_log_val = devide_val(new_log_sq_mean,new_log_val_list)
+
+mir_label = devide_label(miRLAB_style,val_miRLAB)
+old_raw_label = devide_label(sq_mean,val_list)
+old_log_label = devide_label(log_sq_mean,log_val_list)
+new_raw_label = devide_label(new_sq_mean,new_val_list)
+new_log_label = devide_label(new_log_sq_mean,new_log_val_list)
+
+mir_pred = prediction(mir_val, mir_label)
+old_raw = prediction(old_raw_val,old_raw_label)
+old_log = prediction(old_log_val,old_log_label)
+new_raw = prediction(new_raw_val,new_raw_label)
+new_log = prediction(new_log_val,new_log_label)
+
+tma = 0
+tor = 0
+tol = 0
+tnr = 0
+tnl = 0
+for(i in 1:11)
+{
+  tma = tma + performance(mir_pred,'auc')@y.values[[i]][1]
+  tor = tor + performance(old_raw,'auc')@y.values[[i]][1]
+  tol = tol + performance(old_log,'auc')@y.values[[i]][1]
+  tnr = tnr + performance(new_raw,'auc')@y.values[[i]][1]
+  tnl = tnl + performance(new_log,'auc')@y.values[[i]][1]
+}
+mir_AUC = tma/11
+old_raw_AUC = tor/11
+old_log_AUC = tol/11
+new_raw_AUC = tnr/11
+new_log_AUC = tnl/11
+
+png('ROC_sum_up_miRLAB_style.png')
+plot(performance(mir_pred,'tpr','fpr'),col='gray')
+par(new=T)
+plot(performance(mir_pred,'tpr','fpr'),avg='horizontal',xlab='',ylab='')
+abline(0,1,lty = "dotted")
+text(0.2,1,paste('AUC: ',round(mir_AUC,digits = 6),sep = ''))
+title(main = 'ROC sum up 3DB-Golds raw miRLAB style (11 miRs)')
+dev.off()
+
+png('ROC_sum_up_3DB_raw.png')
+plot(performance(old_raw,'tpr','fpr'),col='gray')
+par(new=T)
+plot(performance(old_raw,'tpr','fpr'),avg='horizontal',xlab='',ylab='')
+abline(0,1,lty = "dotted")
+text(0.2,1,paste('AUC: ',round(old_raw_AUC,digits = 6),sep = ''))
+title(main = 'ROC sum up 3DB-Golds raw (11 miRs)')
+dev.off()
+
+png('ROC_sum_up_3DB_log.png')
+plot(performance(old_log,'tpr','fpr'),col='gray')
+par(new=T)
+plot(performance(old_log,'tpr','fpr'),avg='horizontal',xlab='',ylab='')
+abline(0,1,lty = "dotted")
+text(0.2,1,paste('AUC: ',round(old_log_AUC,digits = 6),sep = ''))
+title(main = 'ROC sum up 3DB-Golds log (11 miRs)')
+dev.off()
+
+png('ROC_sum_up_2DB_raw.png')
+plot(performance(new_raw,'tpr','fpr'),col='gray')
+par(new=T)
+plot(performance(new_raw,'tpr','fpr'),avg='horizontal',xlab='',ylab='')
+abline(0,1,lty = "dotted")
+text(0.2,1,paste('AUC: ',round(new_raw_AUC,digits = 6),sep = ''))
+title(main = 'ROC sum up 2DB-Golds raw (11 miRs)')
+dev.off()
+
+png('ROC_sum_up_2DB_log.png')
+plot(performance(new_log,'tpr','fpr'),col='gray')
+par(new=T)
+plot(performance(new_log,'tpr','fpr'),avg='horizontal',xlab='',ylab='')
+abline(0,1,lty = "dotted")
+text(0.2,1,paste('AUC: ',round(new_log_AUC,digits = 6),sep = ''))
+title(main = 'ROC sum up 2DB-Golds log (11 miRs)')
+dev.off() 
